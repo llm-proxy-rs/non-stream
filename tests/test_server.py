@@ -1593,13 +1593,28 @@ class TestProxyEndpoint:
 # ---------------------------------------------------------------------------
 # 14. Passthrough endpoint
 # ---------------------------------------------------------------------------
+# 14. Health check endpoint
+# ---------------------------------------------------------------------------
+
+
+class TestHealthCheck:
+    def test_health_returns_ok(self):
+        client = TestClient(app, raise_server_exceptions=False)
+        resp = client.get("/health")
+        assert resp.status_code == 200
+        assert resp.json() == {"status": "ok"}
+
+
+# ---------------------------------------------------------------------------
+# 15. Passthrough endpoint
+# ---------------------------------------------------------------------------
 
 
 class TestPassthrough:
     def test_passthrough_get(self):
         resp_mock = MagicMock()
         resp_mock.status_code = 200
-        resp_mock.json.return_value = {"status": "ok"}
+        resp_mock.json.return_value = {"models": []}
 
         with patch("server.httpx.AsyncClient") as mock_cls:
             mock_ctx = AsyncMock()
@@ -1609,10 +1624,10 @@ class TestPassthrough:
             mock_cls.return_value = mock_ctx
 
             client = TestClient(app, raise_server_exceptions=False)
-            resp = client.get("/health")
+            resp = client.get("/v1/models")
 
         assert resp.status_code == 200
-        assert resp.json() == {"status": "ok"}
+        assert resp.json() == {"models": []}
 
     def test_passthrough_strips_hop_by_hop_headers(self):
         resp_mock = MagicMock()

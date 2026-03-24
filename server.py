@@ -118,6 +118,11 @@ def parse_sse(text: str) -> list[dict]:
     return events
 
 
+@app.get("/health")
+async def health():
+    return JSONResponse(content={"status": "ok"})
+
+
 @app.api_route("/v1/messages", methods=["POST"])
 async def proxy_messages(request: Request):
     body = await request.json()
