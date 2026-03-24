@@ -1,0 +1,19 @@
+[project]
+name = "non-stream"
+version = "0.1.0"
+description = "Proxy that converts SSE streaming responses from llm-proxy-rs back into non-streaming Anthropic /v1/messages responses"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.115.0",
+    "httpx>=0.28.1",
+    "uvicorn>=0.34.0",
+]
+
+[dependency-groups]
+dev = [
+    "pytest-asyncio>=1.3.0",
+]
+
+[tool.setuptools]
+py-modules = ["server"]
