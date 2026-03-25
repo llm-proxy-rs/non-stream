@@ -13,6 +13,7 @@ import os
 import httpx
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse, StreamingResponse
+from starlette.responses import Response
 import uvicorn
 
 UPSTREAM = os.environ.get("UPSTREAM", "http://localhost:3000")
@@ -191,7 +192,11 @@ async def passthrough(request: Request, path: str):
             headers=headers,
         )
 
-    return JSONResponse(status_code=resp.status_code, content=resp.json())
+    return Response(
+        status_code=resp.status_code,
+        content=resp.content,
+        headers=dict(resp.headers),
+    )
 
 
 if __name__ == "__main__":

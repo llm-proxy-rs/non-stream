@@ -1611,10 +1611,11 @@ class TestHealthCheck:
 
 
 class TestPassthrough:
-    def test_passthrough_get(self):
+    def test_passthrough_json(self):
         resp_mock = MagicMock()
         resp_mock.status_code = 200
-        resp_mock.json.return_value = {"models": []}
+        resp_mock.content = b'{"models": []}'
+        resp_mock.headers = {"content-type": "application/json"}
 
         with patch("server.httpx.AsyncClient") as mock_cls:
             mock_ctx = AsyncMock()
@@ -1629,10 +1630,31 @@ class TestPassthrough:
         assert resp.status_code == 200
         assert resp.json() == {"models": []}
 
+    def test_passthrough_non_json(self):
+        """Upstream returning non-JSON (e.g. HTML) should not crash."""
+        resp_mock = MagicMock()
+        resp_mock.status_code = 200
+        resp_mock.content = b"<html>OK</html>"
+        resp_mock.headers = {"content-type": "text/html"}
+
+        with patch("server.httpx.AsyncClient") as mock_cls:
+            mock_ctx = AsyncMock()
+            mock_ctx.__aenter__ = AsyncMock(return_value=mock_ctx)
+            mock_ctx.__aexit__ = AsyncMock(return_value=False)
+            mock_ctx.request = AsyncMock(return_value=resp_mock)
+            mock_cls.return_value = mock_ctx
+
+            client = TestClient(app, raise_server_exceptions=False)
+            resp = client.get("/")
+
+        assert resp.status_code == 200
+        assert resp.text == "<html>OK</html>"
+
     def test_passthrough_strips_hop_by_hop_headers(self):
         resp_mock = MagicMock()
         resp_mock.status_code = 200
-        resp_mock.json.return_value = {}
+        resp_mock.content = b"{}"
+        resp_mock.headers = {"content-type": "application/json"}
 
         with patch("server.httpx.AsyncClient") as mock_cls:
             mock_ctx = AsyncMock()
