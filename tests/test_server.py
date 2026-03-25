@@ -39,7 +39,11 @@ def _msg_start(msg_id="msg_01", model="claude-sonnet-4-20250514", usage=None):
 
 
 def _block_start(index, content_block):
-    return {"type": "content_block_start", "index": index, "content_block": content_block}
+    return {
+        "type": "content_block_start",
+        "index": index,
+        "content_block": content_block,
+    }
 
 
 def _block_delta(index, delta):
@@ -79,7 +83,9 @@ SIMPLE_TEXT_EVENTS = [
 
 TOOL_USE_EVENTS = [
     _msg_start("msg_02", usage={"input_tokens": 20, "output_tokens": 0}),
-    _block_start(0, {"type": "tool_use", "id": "toolu_01", "name": "get_weather", "input": {}}),
+    _block_start(
+        0, {"type": "tool_use", "id": "toolu_01", "name": "get_weather", "input": {}}
+    ),
     _block_delta(0, {"type": "input_json_delta", "partial_json": '{"loc'}),
     _block_delta(0, {"type": "input_json_delta", "partial_json": 'ation": "NYC"}'}),
     _block_stop(0),
@@ -126,7 +132,9 @@ class TestParseSSE:
         assert parse_sse("") == []
 
     def test_ignores_event_line_only_parses_data(self):
-        text = "event: message_start\ndata: {\"type\": \"message_start\", \"message\": {}}\n\n"
+        text = (
+            'event: message_start\ndata: {"type": "message_start", "message": {}}\n\n'
+        )
         events = parse_sse(text)
         assert len(events) == 1
         assert events[0]["type"] == "message_start"
@@ -174,13 +182,25 @@ class TestReassembleText:
             _msg_start(),
             _block_start(0, {"type": "text", "text": ""}),
         ]
-        words = ["The", " quick", " brown", " fox", " jumps", " over", " the", " lazy", " dog"]
+        words = [
+            "The",
+            " quick",
+            " brown",
+            " fox",
+            " jumps",
+            " over",
+            " the",
+            " lazy",
+            " dog",
+        ]
         for w in words:
             events.append(_block_delta(0, {"type": "text_delta", "text": w}))
         events += [_block_stop(0), _msg_delta("end_turn"), _msg_stop()]
 
         msg = reassemble_message(events)
-        assert msg["content"][0]["text"] == "The quick brown fox jumps over the lazy dog"
+        assert (
+            msg["content"][0]["text"] == "The quick brown fox jumps over the lazy dog"
+        )
 
     def test_single_delta(self):
         events = [
@@ -285,7 +305,9 @@ class TestReassembleToolUse:
         """Tool with no input JSON deltas should get empty dict."""
         events = [
             _msg_start(),
-            _block_start(0, {"type": "tool_use", "id": "t1", "name": "noop", "input": {}}),
+            _block_start(
+                0, {"type": "tool_use", "id": "t1", "name": "noop", "input": {}}
+            ),
             _block_stop(0),
             _msg_delta("tool_use"),
             _msg_stop(),
@@ -295,17 +317,25 @@ class TestReassembleToolUse:
 
     def test_complex_nested_input(self):
         """Tool input with nested objects and arrays."""
-        input_json = json.dumps({
-            "query": "SELECT * FROM users",
-            "params": [1, "hello", None],
-            "options": {"timeout": 30, "retry": True},
-        })
+        input_json = json.dumps(
+            {
+                "query": "SELECT * FROM users",
+                "params": [1, "hello", None],
+                "options": {"timeout": 30, "retry": True},
+            }
+        )
         mid = len(input_json) // 2
         events = [
             _msg_start(),
-            _block_start(0, {"type": "tool_use", "id": "t1", "name": "db_query", "input": {}}),
-            _block_delta(0, {"type": "input_json_delta", "partial_json": input_json[:mid]}),
-            _block_delta(0, {"type": "input_json_delta", "partial_json": input_json[mid:]}),
+            _block_start(
+                0, {"type": "tool_use", "id": "t1", "name": "db_query", "input": {}}
+            ),
+            _block_delta(
+                0, {"type": "input_json_delta", "partial_json": input_json[:mid]}
+            ),
+            _block_delta(
+                0, {"type": "input_json_delta", "partial_json": input_json[mid:]}
+            ),
             _block_stop(0),
             _msg_delta("tool_use"),
             _msg_stop(),
@@ -318,7 +348,9 @@ class TestReassembleToolUse:
     def test_invalid_json_input_falls_back_to_empty_dict(self):
         events = [
             _msg_start(),
-            _block_start(0, {"type": "tool_use", "id": "t1", "name": "broken", "input": {}}),
+            _block_start(
+                0, {"type": "tool_use", "id": "t1", "name": "broken", "input": {}}
+            ),
             _block_delta(0, {"type": "input_json_delta", "partial_json": '{"bad json'}),
             _block_stop(0),
             _msg_delta("tool_use"),
@@ -332,10 +364,22 @@ class TestReassembleToolUse:
         events = [
             _msg_start(),
             _block_start(0, {"type": "text", "text": ""}),
-            _block_delta(0, {"type": "text_delta", "text": "Let me check the weather."}),
+            _block_delta(
+                0, {"type": "text_delta", "text": "Let me check the weather."}
+            ),
             _block_stop(0),
-            _block_start(1, {"type": "tool_use", "id": "toolu_01", "name": "get_weather", "input": {}}),
-            _block_delta(1, {"type": "input_json_delta", "partial_json": '{"city": "London"}'}),
+            _block_start(
+                1,
+                {
+                    "type": "tool_use",
+                    "id": "toolu_01",
+                    "name": "get_weather",
+                    "input": {},
+                },
+            ),
+            _block_delta(
+                1, {"type": "input_json_delta", "partial_json": '{"city": "London"}'}
+            ),
             _block_stop(1),
             _msg_delta("tool_use", usage={"output_tokens": 20}),
             _msg_stop(),
@@ -352,14 +396,34 @@ class TestReassembleToolUse:
         """Multiple tool calls in a single response (parallel tool use)."""
         events = [
             _msg_start(),
-            _block_start(0, {"type": "tool_use", "id": "toolu_01", "name": "get_weather", "input": {}}),
-            _block_delta(0, {"type": "input_json_delta", "partial_json": '{"city": "NYC"}'}),
+            _block_start(
+                0,
+                {
+                    "type": "tool_use",
+                    "id": "toolu_01",
+                    "name": "get_weather",
+                    "input": {},
+                },
+            ),
+            _block_delta(
+                0, {"type": "input_json_delta", "partial_json": '{"city": "NYC"}'}
+            ),
             _block_stop(0),
-            _block_start(1, {"type": "tool_use", "id": "toolu_02", "name": "get_time", "input": {}}),
-            _block_delta(1, {"type": "input_json_delta", "partial_json": '{"tz": "EST"}'}),
+            _block_start(
+                1,
+                {"type": "tool_use", "id": "toolu_02", "name": "get_time", "input": {}},
+            ),
+            _block_delta(
+                1, {"type": "input_json_delta", "partial_json": '{"tz": "EST"}'}
+            ),
             _block_stop(1),
-            _block_start(2, {"type": "tool_use", "id": "toolu_03", "name": "get_news", "input": {}}),
-            _block_delta(2, {"type": "input_json_delta", "partial_json": '{"topic": "tech"}'}),
+            _block_start(
+                2,
+                {"type": "tool_use", "id": "toolu_03", "name": "get_news", "input": {}},
+            ),
+            _block_delta(
+                2, {"type": "input_json_delta", "partial_json": '{"topic": "tech"}'}
+            ),
             _block_stop(2),
             _msg_delta("tool_use", usage={"output_tokens": 30}),
             _msg_stop(),
@@ -379,10 +443,14 @@ class TestReassembleToolUse:
             _block_start(0, {"type": "text", "text": ""}),
             _block_delta(0, {"type": "text_delta", "text": "I'll look that up."}),
             _block_stop(0),
-            _block_start(1, {"type": "tool_use", "id": "toolu_01", "name": "search", "input": {}}),
+            _block_start(
+                1, {"type": "tool_use", "id": "toolu_01", "name": "search", "input": {}}
+            ),
             _block_delta(1, {"type": "input_json_delta", "partial_json": '{"q": "a"}'}),
             _block_stop(1),
-            _block_start(2, {"type": "tool_use", "id": "toolu_02", "name": "search", "input": {}}),
+            _block_start(
+                2, {"type": "tool_use", "id": "toolu_02", "name": "search", "input": {}}
+            ),
             _block_delta(2, {"type": "input_json_delta", "partial_json": '{"q": "b"}'}),
             _block_stop(2),
             _msg_delta("tool_use"),
@@ -405,14 +473,19 @@ class TestReassembleServerToolUse:
         """server_tool_use blocks use input_json_delta just like tool_use."""
         events = [
             _msg_start(),
-            _block_start(0, {
-                "type": "server_tool_use",
-                "id": "srvtoolu_01",
-                "name": "web_search",
-                "input": {},
-            }),
+            _block_start(
+                0,
+                {
+                    "type": "server_tool_use",
+                    "id": "srvtoolu_01",
+                    "name": "web_search",
+                    "input": {},
+                },
+            ),
             _block_delta(0, {"type": "input_json_delta", "partial_json": '{"query"'}),
-            _block_delta(0, {"type": "input_json_delta", "partial_json": ': "python docs"}'}),
+            _block_delta(
+                0, {"type": "input_json_delta", "partial_json": ': "python docs"}'}
+            ),
             _block_stop(0),
             _msg_delta("tool_use"),
             _msg_stop(),
@@ -427,12 +500,15 @@ class TestReassembleServerToolUse:
     def test_server_tool_use_empty_input(self):
         events = [
             _msg_start(),
-            _block_start(0, {
-                "type": "server_tool_use",
-                "id": "srvtoolu_02",
-                "name": "code_execution",
-                "input": {},
-            }),
+            _block_start(
+                0,
+                {
+                    "type": "server_tool_use",
+                    "id": "srvtoolu_02",
+                    "name": "code_execution",
+                    "input": {},
+                },
+            ),
             _block_stop(0),
             _msg_delta("tool_use"),
             _msg_stop(),
@@ -444,26 +520,34 @@ class TestReassembleServerToolUse:
         """web_search_tool_result blocks arrive complete in content_block_start."""
         events = [
             _msg_start(),
-            _block_start(0, {
-                "type": "server_tool_use",
-                "id": "srvtoolu_01",
-                "name": "web_search",
-                "input": {},
-            }),
-            _block_delta(0, {"type": "input_json_delta", "partial_json": '{"query": "test"}'}),
+            _block_start(
+                0,
+                {
+                    "type": "server_tool_use",
+                    "id": "srvtoolu_01",
+                    "name": "web_search",
+                    "input": {},
+                },
+            ),
+            _block_delta(
+                0, {"type": "input_json_delta", "partial_json": '{"query": "test"}'}
+            ),
             _block_stop(0),
-            _block_start(1, {
-                "type": "web_search_tool_result",
-                "tool_use_id": "srvtoolu_01",
-                "content": [
-                    {
-                        "type": "web_search_result",
-                        "url": "https://example.com",
-                        "title": "Example",
-                        "encrypted_content": "abc123",
-                    }
-                ],
-            }),
+            _block_start(
+                1,
+                {
+                    "type": "web_search_tool_result",
+                    "tool_use_id": "srvtoolu_01",
+                    "content": [
+                        {
+                            "type": "web_search_result",
+                            "url": "https://example.com",
+                            "title": "Example",
+                            "encrypted_content": "abc123",
+                        }
+                    ],
+                },
+            ),
             _block_stop(1),
             _block_start(2, {"type": "text", "text": ""}),
             _block_delta(2, {"type": "text_delta", "text": "Based on my search..."}),
@@ -492,14 +576,19 @@ class TestReassembleMcpToolUse:
         """mcp_tool_use blocks use input_json_delta like regular tool_use."""
         events = [
             _msg_start(),
-            _block_start(0, {
-                "type": "mcp_tool_use",
-                "id": "mcptoolu_01",
-                "name": "mcp__myserver__query",
-                "server_name": "myserver",
-                "input": {},
-            }),
-            _block_delta(0, {"type": "input_json_delta", "partial_json": '{"sql": "SELECT 1"}'}),
+            _block_start(
+                0,
+                {
+                    "type": "mcp_tool_use",
+                    "id": "mcptoolu_01",
+                    "name": "mcp__myserver__query",
+                    "server_name": "myserver",
+                    "input": {},
+                },
+            ),
+            _block_delta(
+                0, {"type": "input_json_delta", "partial_json": '{"sql": "SELECT 1"}'}
+            ),
             _block_stop(0),
             _msg_delta("tool_use"),
             _msg_stop(),
@@ -515,21 +604,27 @@ class TestReassembleMcpToolUse:
         """mcp_tool_result blocks arrive complete in content_block_start."""
         events = [
             _msg_start(),
-            _block_start(0, {
-                "type": "mcp_tool_use",
-                "id": "mcptoolu_01",
-                "name": "mcp__db__query",
-                "server_name": "db",
-                "input": {},
-            }),
+            _block_start(
+                0,
+                {
+                    "type": "mcp_tool_use",
+                    "id": "mcptoolu_01",
+                    "name": "mcp__db__query",
+                    "server_name": "db",
+                    "input": {},
+                },
+            ),
             _block_delta(0, {"type": "input_json_delta", "partial_json": '{"q": "x"}'}),
             _block_stop(0),
-            _block_start(1, {
-                "type": "mcp_tool_result",
-                "tool_use_id": "mcptoolu_01",
-                "is_error": False,
-                "content": [{"type": "text", "text": "result data"}],
-            }),
+            _block_start(
+                1,
+                {
+                    "type": "mcp_tool_result",
+                    "tool_use_id": "mcptoolu_01",
+                    "is_error": False,
+                    "content": [{"type": "text", "text": "result data"}],
+                },
+            ),
             _block_stop(1),
             _block_start(2, {"type": "text", "text": ""}),
             _block_delta(2, {"type": "text_delta", "text": "The result is..."}),
@@ -590,7 +685,9 @@ class TestReassembleThinking:
             _block_delta(0, {"type": "thinking_delta", "thinking": "visible thought"}),
             _block_delta(0, {"type": "signature_delta", "signature": "sig1"}),
             _block_stop(0),
-            _block_start(1, {"type": "redacted_thinking", "data": "base64encodeddata=="}),
+            _block_start(
+                1, {"type": "redacted_thinking", "data": "base64encodeddata=="}
+            ),
             _block_stop(1),
             _block_start(2, {"type": "text", "text": ""}),
             _block_delta(2, {"type": "text_delta", "text": "Final answer"}),
@@ -616,8 +713,12 @@ class TestReassembleThinking:
             _block_delta(0, {"type": "thinking_delta", "thinking": "I need to search"}),
             _block_delta(0, {"type": "signature_delta", "signature": "sig"}),
             _block_stop(0),
-            _block_start(1, {"type": "tool_use", "id": "toolu_01", "name": "search", "input": {}}),
-            _block_delta(1, {"type": "input_json_delta", "partial_json": '{"q": "test"}'}),
+            _block_start(
+                1, {"type": "tool_use", "id": "toolu_01", "name": "search", "input": {}}
+            ),
+            _block_delta(
+                1, {"type": "input_json_delta", "partial_json": '{"q": "test"}'}
+            ),
             _block_stop(1),
             _msg_delta("tool_use"),
             _msg_stop(),
@@ -634,8 +735,12 @@ class TestReassembleThinking:
         """Long thinking split across many deltas."""
         events = [_msg_start(), _block_start(0, {"type": "thinking", "thinking": ""})]
         for i in range(100):
-            events.append(_block_delta(0, {"type": "thinking_delta", "thinking": f"chunk{i} "}))
-        events.append(_block_delta(0, {"type": "signature_delta", "signature": "longsig"}))
+            events.append(
+                _block_delta(0, {"type": "thinking_delta", "thinking": f"chunk{i} "})
+            )
+        events.append(
+            _block_delta(0, {"type": "signature_delta", "signature": "longsig"})
+        )
         events.append(_block_stop(0))
         events += [
             _block_start(1, {"type": "text", "text": ""}),
@@ -702,8 +807,13 @@ class TestReassembleThinking:
             _block_delta(2, {"type": "thinking_delta", "thinking": "Call the API"}),
             _block_delta(2, {"type": "signature_delta", "signature": "sig2"}),
             _block_stop(2),
-            _block_start(3, {"type": "tool_use", "id": "toolu_01", "name": "api_call", "input": {}}),
-            _block_delta(3, {"type": "input_json_delta", "partial_json": '{"endpoint": "/data"}'}),
+            _block_start(
+                3,
+                {"type": "tool_use", "id": "toolu_01", "name": "api_call", "input": {}},
+            ),
+            _block_delta(
+                3, {"type": "input_json_delta", "partial_json": '{"endpoint": "/data"}'}
+            ),
             _block_stop(3),
             _msg_delta("tool_use"),
             _msg_stop(),
@@ -878,12 +988,14 @@ class TestReassembleUsage:
     def test_cache_usage_fields(self):
         """Cache tokens from message_start usage are preserved."""
         events = [
-            _msg_start(usage={
-                "input_tokens": 100,
-                "output_tokens": 0,
-                "cache_creation_input_tokens": 50,
-                "cache_read_input_tokens": 30,
-            }),
+            _msg_start(
+                usage={
+                    "input_tokens": 100,
+                    "output_tokens": 0,
+                    "cache_creation_input_tokens": 50,
+                    "cache_read_input_tokens": 30,
+                }
+            ),
             _block_start(0, {"type": "text", "text": ""}),
             _block_delta(0, {"type": "text_delta", "text": "cached"}),
             _block_stop(0),
@@ -945,7 +1057,10 @@ class TestReassembleEdgeCases:
             _msg_start(),
             _block_start(0, {"type": "text", "text": ""}),
             _block_delta(0, {"type": "text_delta", "text": "partial"}),
-            {"type": "error", "error": {"type": "overloaded_error", "message": "Overloaded"}},
+            {
+                "type": "error",
+                "error": {"type": "overloaded_error", "message": "Overloaded"},
+            },
         ]
         msg = reassemble_message(events)
         # Should still produce a message with whatever was accumulated
@@ -1054,17 +1169,39 @@ class TestReassembleComplexScenarios:
         events = [
             _msg_start(usage={"input_tokens": 500, "output_tokens": 0}),
             _block_start(0, {"type": "thinking", "thinking": ""}),
-            _block_delta(0, {"type": "thinking_delta", "thinking": "The user wants weather. "}),
-            _block_delta(0, {"type": "thinking_delta", "thinking": "I should use the tool."}),
-            _block_delta(0, {"type": "signature_delta", "signature": "thinking_sig_abc"}),
+            _block_delta(
+                0, {"type": "thinking_delta", "thinking": "The user wants weather. "}
+            ),
+            _block_delta(
+                0, {"type": "thinking_delta", "thinking": "I should use the tool."}
+            ),
+            _block_delta(
+                0, {"type": "signature_delta", "signature": "thinking_sig_abc"}
+            ),
             _block_stop(0),
             _block_start(1, {"type": "text", "text": ""}),
-            _block_delta(1, {"type": "text_delta", "text": "I'll check the weather for you."}),
+            _block_delta(
+                1, {"type": "text_delta", "text": "I'll check the weather for you."}
+            ),
             _block_stop(1),
-            _block_start(2, {"type": "tool_use", "id": "toolu_abc", "name": "get_weather", "input": {}}),
-            _block_delta(2, {"type": "input_json_delta", "partial_json": '{"location"'}),
-            _block_delta(2, {"type": "input_json_delta", "partial_json": ': "San Francisco"'}),
-            _block_delta(2, {"type": "input_json_delta", "partial_json": ', "units": "celsius"}'}),
+            _block_start(
+                2,
+                {
+                    "type": "tool_use",
+                    "id": "toolu_abc",
+                    "name": "get_weather",
+                    "input": {},
+                },
+            ),
+            _block_delta(
+                2, {"type": "input_json_delta", "partial_json": '{"location"'}
+            ),
+            _block_delta(
+                2, {"type": "input_json_delta", "partial_json": ': "San Francisco"'}
+            ),
+            _block_delta(
+                2, {"type": "input_json_delta", "partial_json": ', "units": "celsius"}'}
+            ),
             _block_stop(2),
             _msg_delta("tool_use", usage={"output_tokens": 150}),
             _msg_stop(),
@@ -1082,7 +1219,10 @@ class TestReassembleComplexScenarios:
         # Tool use
         assert msg["content"][2]["type"] == "tool_use"
         assert msg["content"][2]["id"] == "toolu_abc"
-        assert msg["content"][2]["input"] == {"location": "San Francisco", "units": "celsius"}
+        assert msg["content"][2]["input"] == {
+            "location": "San Francisco",
+            "units": "celsius",
+        }
         # Message-level fields
         assert msg["stop_reason"] == "tool_use"
         assert msg["usage"]["input_tokens"] == 500
@@ -1099,26 +1239,38 @@ class TestReassembleComplexScenarios:
         }
         events = [
             _msg_start(),
-            _block_start(0, {
-                "type": "server_tool_use",
-                "id": "srvtoolu_01",
-                "name": "web_search",
-                "input": {},
-            }),
-            _block_delta(0, {"type": "input_json_delta", "partial_json": '{"query": "latest python version"}'}),
+            _block_start(
+                0,
+                {
+                    "type": "server_tool_use",
+                    "id": "srvtoolu_01",
+                    "name": "web_search",
+                    "input": {},
+                },
+            ),
+            _block_delta(
+                0,
+                {
+                    "type": "input_json_delta",
+                    "partial_json": '{"query": "latest python version"}',
+                },
+            ),
             _block_stop(0),
-            _block_start(1, {
-                "type": "web_search_tool_result",
-                "tool_use_id": "srvtoolu_01",
-                "content": [
-                    {
-                        "type": "web_search_result",
-                        "url": "https://python.org/downloads/",
-                        "title": "Downloads",
-                        "encrypted_content": "enc_content",
-                    }
-                ],
-            }),
+            _block_start(
+                1,
+                {
+                    "type": "web_search_tool_result",
+                    "tool_use_id": "srvtoolu_01",
+                    "content": [
+                        {
+                            "type": "web_search_result",
+                            "url": "https://python.org/downloads/",
+                            "title": "Downloads",
+                            "encrypted_content": "enc_content",
+                        }
+                    ],
+                },
+            ),
             _block_stop(1),
             _block_start(2, {"type": "text", "text": ""}),
             _block_delta(2, {"type": "text_delta", "text": "Python 3.13 was released"}),
@@ -1136,7 +1288,9 @@ class TestReassembleComplexScenarios:
         assert msg["content"][2]["type"] == "text"
         assert msg["content"][2]["text"] == "Python 3.13 was released in October 2024."
         assert len(msg["content"][2]["citations"]) == 1
-        assert msg["content"][2]["citations"][0]["url"] == "https://python.org/downloads/"
+        assert (
+            msg["content"][2]["citations"][0]["url"] == "https://python.org/downloads/"
+        )
 
     def test_interleaved_thinking_multi_tool(self):
         """Interleaved thinking with multiple tool calls."""
@@ -1144,21 +1298,33 @@ class TestReassembleComplexScenarios:
             _msg_start(),
             # Think about first tool
             _block_start(0, {"type": "thinking", "thinking": ""}),
-            _block_delta(0, {"type": "thinking_delta", "thinking": "First, check weather"}),
+            _block_delta(
+                0, {"type": "thinking_delta", "thinking": "First, check weather"}
+            ),
             _block_delta(0, {"type": "signature_delta", "signature": "s1"}),
             _block_stop(0),
             # First tool call
-            _block_start(1, {"type": "tool_use", "id": "t1", "name": "weather", "input": {}}),
-            _block_delta(1, {"type": "input_json_delta", "partial_json": '{"city": "NYC"}'}),
+            _block_start(
+                1, {"type": "tool_use", "id": "t1", "name": "weather", "input": {}}
+            ),
+            _block_delta(
+                1, {"type": "input_json_delta", "partial_json": '{"city": "NYC"}'}
+            ),
             _block_stop(1),
             # Think about second tool
             _block_start(2, {"type": "thinking", "thinking": ""}),
-            _block_delta(2, {"type": "thinking_delta", "thinking": "Also check calendar"}),
+            _block_delta(
+                2, {"type": "thinking_delta", "thinking": "Also check calendar"}
+            ),
             _block_delta(2, {"type": "signature_delta", "signature": "s2"}),
             _block_stop(2),
             # Second tool call
-            _block_start(3, {"type": "tool_use", "id": "t2", "name": "calendar", "input": {}}),
-            _block_delta(3, {"type": "input_json_delta", "partial_json": '{"date": "today"}'}),
+            _block_start(
+                3, {"type": "tool_use", "id": "t2", "name": "calendar", "input": {}}
+            ),
+            _block_delta(
+                3, {"type": "input_json_delta", "partial_json": '{"date": "today"}'}
+            ),
             _block_stop(3),
             _msg_delta("tool_use"),
             _msg_stop(),
@@ -1166,7 +1332,10 @@ class TestReassembleComplexScenarios:
         msg = reassemble_message(events)
         assert len(msg["content"]) == 4
         assert [b["type"] for b in msg["content"]] == [
-            "thinking", "tool_use", "thinking", "tool_use"
+            "thinking",
+            "tool_use",
+            "thinking",
+            "tool_use",
         ]
         assert msg["content"][1]["input"] == {"city": "NYC"}
         assert msg["content"][3]["input"] == {"date": "today"}
@@ -1244,7 +1413,10 @@ class TestProxyEndpoint:
             client = TestClient(app, raise_server_exceptions=False)
             resp = client.post(
                 "/v1/messages",
-                json={"model": "claude-sonnet-4-20250514", "messages": [{"role": "user", "content": "hi"}]},
+                json={
+                    "model": "claude-sonnet-4-20250514",
+                    "messages": [{"role": "user", "content": "hi"}],
+                },
                 headers={"x-api-key": "test-key", "anthropic-version": "2023-06-01"},
             )
         assert resp.status_code == 200
@@ -1278,9 +1450,15 @@ class TestProxyEndpoint:
             client = TestClient(app, raise_server_exceptions=False)
             client.post(
                 "/v1/messages",
-                json={"model": "claude-sonnet-4-20250514", "stream": False, "messages": []},
+                json={
+                    "model": "claude-sonnet-4-20250514",
+                    "stream": False,
+                    "messages": [],
+                },
             )
-            sent_body = mock_ctx.post.call_args.kwargs.get("json") or mock_ctx.post.call_args[1].get("json")
+            sent_body = mock_ctx.post.call_args.kwargs.get(
+                "json"
+            ) or mock_ctx.post.call_args[1].get("json")
             assert sent_body["stream"] is True
 
     def test_stream_true_passthrough(self):
@@ -1310,7 +1488,11 @@ class TestProxyEndpoint:
             client = TestClient(app, raise_server_exceptions=False)
             resp = client.post(
                 "/v1/messages",
-                json={"model": "claude-sonnet-4-20250514", "stream": True, "messages": []},
+                json={
+                    "model": "claude-sonnet-4-20250514",
+                    "stream": True,
+                    "messages": [],
+                },
                 headers={"x-api-key": "sk-test"},
             )
 
@@ -1321,6 +1503,7 @@ class TestProxyEndpoint:
 
     def test_stream_true_forwards_body_as_is(self):
         """When stream=True, the body is forwarded unchanged (stream stays True)."""
+
         async def fake_aiter_bytes():
             yield b"data: {}\n\n"
 
@@ -1342,7 +1525,11 @@ class TestProxyEndpoint:
             client = TestClient(app, raise_server_exceptions=False)
             client.post(
                 "/v1/messages",
-                json={"model": "claude-sonnet-4-20250514", "stream": True, "messages": [{"role": "user", "content": "hi"}]},
+                json={
+                    "model": "claude-sonnet-4-20250514",
+                    "stream": True,
+                    "messages": [{"role": "user", "content": "hi"}],
+                },
             )
 
             call_args = mock_ctx.stream.call_args
@@ -1356,7 +1543,11 @@ class TestProxyEndpoint:
             client = TestClient(app, raise_server_exceptions=False)
             resp = client.post(
                 "/v1/messages",
-                json={"model": "claude-sonnet-4-20250514", "stream": False, "messages": []},
+                json={
+                    "model": "claude-sonnet-4-20250514",
+                    "stream": False,
+                    "messages": [],
+                },
             )
         assert resp.status_code == 200
         body = resp.json()
@@ -1377,7 +1568,9 @@ class TestProxyEndpoint:
         assert body["type"] == "message"
 
     def test_forwards_upstream_400_error(self):
-        error_body = json.dumps({"error": {"type": "invalid_request_error", "message": "bad request"}})
+        error_body = json.dumps(
+            {"error": {"type": "invalid_request_error", "message": "bad request"}}
+        )
         mock_resp = self._mock_response(400, error_body)
         with self._patch_upstream(mock_resp):
             client = TestClient(app, raise_server_exceptions=False)
@@ -1386,7 +1579,9 @@ class TestProxyEndpoint:
         assert resp.json()["error"]["type"] == "invalid_request_error"
 
     def test_forwards_upstream_401_auth_error(self):
-        error_body = json.dumps({"error": {"type": "authentication_error", "message": "invalid api key"}})
+        error_body = json.dumps(
+            {"error": {"type": "authentication_error", "message": "invalid api key"}}
+        )
         mock_resp = self._mock_response(401, error_body)
         with self._patch_upstream(mock_resp):
             client = TestClient(app, raise_server_exceptions=False)
@@ -1395,7 +1590,9 @@ class TestProxyEndpoint:
         assert resp.json()["error"]["type"] == "authentication_error"
 
     def test_forwards_upstream_403_permission_error(self):
-        error_body = json.dumps({"error": {"type": "permission_error", "message": "forbidden"}})
+        error_body = json.dumps(
+            {"error": {"type": "permission_error", "message": "forbidden"}}
+        )
         mock_resp = self._mock_response(403, error_body)
         with self._patch_upstream(mock_resp):
             client = TestClient(app, raise_server_exceptions=False)
@@ -1404,7 +1601,9 @@ class TestProxyEndpoint:
         assert resp.json()["error"]["type"] == "permission_error"
 
     def test_forwards_upstream_404_not_found(self):
-        error_body = json.dumps({"error": {"type": "not_found_error", "message": "not found"}})
+        error_body = json.dumps(
+            {"error": {"type": "not_found_error", "message": "not found"}}
+        )
         mock_resp = self._mock_response(404, error_body)
         with self._patch_upstream(mock_resp):
             client = TestClient(app, raise_server_exceptions=False)
@@ -1412,7 +1611,9 @@ class TestProxyEndpoint:
         assert resp.status_code == 404
 
     def test_forwards_upstream_429_rate_limit(self):
-        error_body = json.dumps({"error": {"type": "rate_limit_error", "message": "rate limited"}})
+        error_body = json.dumps(
+            {"error": {"type": "rate_limit_error", "message": "rate limited"}}
+        )
         mock_resp = self._mock_response(429, error_body)
         with self._patch_upstream(mock_resp):
             client = TestClient(app, raise_server_exceptions=False)
@@ -1420,7 +1621,9 @@ class TestProxyEndpoint:
         assert resp.status_code == 429
 
     def test_forwards_upstream_500_api_error(self):
-        error_body = json.dumps({"error": {"type": "api_error", "message": "internal error"}})
+        error_body = json.dumps(
+            {"error": {"type": "api_error", "message": "internal error"}}
+        )
         mock_resp = self._mock_response(500, error_body)
         with self._patch_upstream(mock_resp):
             client = TestClient(app, raise_server_exceptions=False)
@@ -1428,7 +1631,9 @@ class TestProxyEndpoint:
         assert resp.status_code == 500
 
     def test_forwards_upstream_529_overloaded(self):
-        error_body = json.dumps({"error": {"type": "overloaded_error", "message": "overloaded"}})
+        error_body = json.dumps(
+            {"error": {"type": "overloaded_error", "message": "overloaded"}}
+        )
         mock_resp = self._mock_response(529, error_body)
         with self._patch_upstream(mock_resp):
             client = TestClient(app, raise_server_exceptions=False)
@@ -1468,7 +1673,9 @@ class TestProxyEndpoint:
                 json={"messages": []},
                 headers={"x-api-key": "sk-ant-test123"},
             )
-            sent_headers = mock_ctx.post.call_args.kwargs.get("headers") or mock_ctx.post.call_args[1].get("headers")
+            sent_headers = mock_ctx.post.call_args.kwargs.get(
+                "headers"
+            ) or mock_ctx.post.call_args[1].get("headers")
             assert sent_headers["x-api-key"] == "sk-ant-test123"
 
     def test_forwards_authorization_header(self):
@@ -1480,7 +1687,9 @@ class TestProxyEndpoint:
                 json={"messages": []},
                 headers={"authorization": "Bearer sk-ant-test123"},
             )
-            sent_headers = mock_ctx.post.call_args.kwargs.get("headers") or mock_ctx.post.call_args[1].get("headers")
+            sent_headers = mock_ctx.post.call_args.kwargs.get(
+                "headers"
+            ) or mock_ctx.post.call_args[1].get("headers")
             assert sent_headers["authorization"] == "Bearer sk-ant-test123"
 
     def test_forwards_anthropic_version(self):
@@ -1492,7 +1701,9 @@ class TestProxyEndpoint:
                 json={"messages": []},
                 headers={"anthropic-version": "2023-06-01"},
             )
-            sent_headers = mock_ctx.post.call_args.kwargs.get("headers") or mock_ctx.post.call_args[1].get("headers")
+            sent_headers = mock_ctx.post.call_args.kwargs.get(
+                "headers"
+            ) or mock_ctx.post.call_args[1].get("headers")
             assert sent_headers["anthropic-version"] == "2023-06-01"
 
     def test_forwards_anthropic_beta(self):
@@ -1504,7 +1715,9 @@ class TestProxyEndpoint:
                 json={"messages": []},
                 headers={"anthropic-beta": "interleaved-thinking-2025-05-14"},
             )
-            sent_headers = mock_ctx.post.call_args.kwargs.get("headers") or mock_ctx.post.call_args[1].get("headers")
+            sent_headers = mock_ctx.post.call_args.kwargs.get(
+                "headers"
+            ) or mock_ctx.post.call_args[1].get("headers")
             assert sent_headers["anthropic-beta"] == "interleaved-thinking-2025-05-14"
 
     def test_strips_hop_by_hop_headers(self):
@@ -1516,7 +1729,9 @@ class TestProxyEndpoint:
                 json={"messages": []},
                 headers={"connection": "keep-alive", "transfer-encoding": "chunked"},
             )
-            sent_headers = mock_ctx.post.call_args.kwargs.get("headers") or mock_ctx.post.call_args[1].get("headers")
+            sent_headers = mock_ctx.post.call_args.kwargs.get(
+                "headers"
+            ) or mock_ctx.post.call_args[1].get("headers")
             assert "host" not in sent_headers
             assert "content-length" not in sent_headers
             assert "transfer-encoding" not in sent_headers
@@ -1531,7 +1746,9 @@ class TestProxyEndpoint:
                 json={"messages": []},
                 headers={"x-custom-header": "value", "x-api-key": "sk-test"},
             )
-            sent_headers = mock_ctx.post.call_args.kwargs.get("headers") or mock_ctx.post.call_args[1].get("headers")
+            sent_headers = mock_ctx.post.call_args.kwargs.get(
+                "headers"
+            ) or mock_ctx.post.call_args[1].get("headers")
             assert sent_headers["x-custom-header"] == "value"
             assert sent_headers["x-api-key"] == "sk-test"
 
@@ -1550,7 +1767,9 @@ class TestProxyEndpoint:
                     "messages": [{"role": "user", "content": "hi"}],
                 },
             )
-            sent_body = mock_ctx.post.call_args.kwargs.get("json") or mock_ctx.post.call_args[1].get("json")
+            sent_body = mock_ctx.post.call_args.kwargs.get(
+                "json"
+            ) or mock_ctx.post.call_args[1].get("json")
             assert sent_body["model"] == "claude-opus-4-20250514"
             assert sent_body["max_tokens"] == 1024
             assert sent_body["temperature"] == 0.7
@@ -1564,13 +1783,18 @@ class TestProxyEndpoint:
             {
                 "name": "get_weather",
                 "description": "Get weather",
-                "input_schema": {"type": "object", "properties": {"city": {"type": "string"}}},
+                "input_schema": {
+                    "type": "object",
+                    "properties": {"city": {"type": "string"}},
+                },
             }
         ]
         with self._patch_upstream(mock_resp) as mock_ctx:
             client = TestClient(app, raise_server_exceptions=False)
             client.post("/v1/messages", json={"messages": [], "tools": tools})
-            sent_body = mock_ctx.post.call_args.kwargs.get("json") or mock_ctx.post.call_args[1].get("json")
+            sent_body = mock_ctx.post.call_args.kwargs.get(
+                "json"
+            ) or mock_ctx.post.call_args[1].get("json")
             assert sent_body["tools"] == tools
 
     def test_thinking_config_preserved(self):
@@ -1586,7 +1810,9 @@ class TestProxyEndpoint:
                     "thinking": {"type": "enabled", "budget_tokens": 10000},
                 },
             )
-            sent_body = mock_ctx.post.call_args.kwargs.get("json") or mock_ctx.post.call_args[1].get("json")
+            sent_body = mock_ctx.post.call_args.kwargs.get(
+                "json"
+            ) or mock_ctx.post.call_args[1].get("json")
             assert sent_body["thinking"] == {"type": "enabled", "budget_tokens": 10000}
 
 
@@ -1631,13 +1857,16 @@ class TestPassthrough:
         assert resp.json() == {"models": []}
 
     def test_passthrough_non_json(self):
-        """Upstream returning non-JSON (e.g. HTML) should not crash."""
+        """Upstream returning non-JSON should not crash."""
         resp_mock = MagicMock()
         resp_mock.status_code = 200
         resp_mock.content = b"<html>OK</html>"
         resp_mock.headers = {"content-type": "text/html"}
 
-        with patch("server.httpx.AsyncClient") as mock_cls:
+        with (
+            patch("server.httpx.AsyncClient") as mock_cls,
+            patch("server._ALLOWED_PATHS", frozenset({"/"})),
+        ):
             mock_ctx = AsyncMock()
             mock_ctx.__aenter__ = AsyncMock(return_value=mock_ctx)
             mock_ctx.__aexit__ = AsyncMock(return_value=False)
@@ -1649,6 +1878,12 @@ class TestPassthrough:
 
         assert resp.status_code == 200
         assert resp.text == "<html>OK</html>"
+
+    def test_passthrough_blocks_unlisted_path(self):
+        client = TestClient(app, raise_server_exceptions=False)
+        resp = client.get("/some/random/path")
+        assert resp.status_code == 404
+        assert resp.json() == {"error": "not found"}
 
     def test_passthrough_strips_hop_by_hop_headers(self):
         resp_mock = MagicMock()
@@ -1664,8 +1899,10 @@ class TestPassthrough:
             mock_cls.return_value = mock_ctx
 
             client = TestClient(app, raise_server_exceptions=False)
-            client.get("/some/path")
+            client.get("/v1/models")
 
             call_kwargs = mock_ctx.request.call_args
-            sent_headers = call_kwargs.kwargs.get("headers") or call_kwargs[1].get("headers")
+            sent_headers = call_kwargs.kwargs.get("headers") or call_kwargs[1].get(
+                "headers"
+            )
             assert "host" not in sent_headers

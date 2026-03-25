@@ -21,21 +21,41 @@ PORT = int(os.environ.get("PORT", "3001"))
 TIMEOUT = float(os.environ.get("TIMEOUT", "600"))
 LOG_LEVEL = os.environ.get("LOG_LEVEL", "INFO").upper()
 
+# Comma-separated list of paths allowed through the proxy.
+_ALLOWED_PATHS = frozenset(
+    p.strip()
+    for p in os.environ.get(
+        "ALLOWED_PATHS", "/v1/messages,/v1/messages/count_tokens,/v1/models,/health"
+    ).split(",")
+    if p.strip()
+)
+
 log = logging.getLogger("non-stream")
 
 app = FastAPI()
 
+
+@app.middleware("http")
+async def check_allowed_paths(request: Request, call_next):
+    if request.url.path not in _ALLOWED_PATHS:
+        log.warning("blocked path=%s method=%s", request.url.path, request.method)
+        return JSONResponse(status_code=404, content={"error": "not found"})
+    return await call_next(request)
+
+
 # Hop-by-hop headers that should not be forwarded by a proxy.
-_HOP_BY_HOP = frozenset({
-    "host",
-    "content-length",
-    "transfer-encoding",
-    "connection",
-    "keep-alive",
-    "upgrade",
-    "te",
-    "trailer",
-})
+_HOP_BY_HOP = frozenset(
+    {
+        "host",
+        "content-length",
+        "transfer-encoding",
+        "connection",
+        "keep-alive",
+        "upgrade",
+        "te",
+        "trailer",
+    }
+)
 
 
 def _proxy_headers(request: Request) -> dict[str, str]:
@@ -71,7 +91,9 @@ def reassemble_message(events: list[dict]) -> dict:
                 block.setdefault("thinking", "")
                 block["thinking"] += delta.get("thinking", "")
             elif delta_type == "signature_delta":
-                block["signature"] = block.get("signature", "") + delta.get("signature", "")
+                block["signature"] = block.get("signature", "") + delta.get(
+                    "signature", ""
+                )
             elif delta_type == "input_json_delta":
                 if not isinstance(block.get("input"), str):
                     block["input"] = ""
@@ -88,7 +110,9 @@ def reassemble_message(events: list[dict]) -> dict:
             # Parse accumulated tool input JSON string for any tool-like block
             if isinstance(block.get("input"), str):
                 try:
-                    block["input"] = json.loads(block["input"]) if block["input"] else {}
+                    block["input"] = (
+                        json.loads(block["input"]) if block["input"] else {}
+                    )
                 except json.JSONDecodeError:
                     block["input"] = {}
 
@@ -136,7 +160,11 @@ async def proxy_messages(request: Request):
 
     # If caller wants streaming, passthrough the SSE stream directly
     if body.get("stream"):
-        log.info("stream passthrough method=POST path=/v1/messages model=%s", body.get("model"))
+        log.info(
+            "stream passthrough method=POST path=/v1/messages model=%s",
+            body.get("model"),
+        )
+
         async def stream_upstream():
             async with httpx.AsyncClient(timeout=httpx.Timeout(TIMEOUT)) as client:
                 async with client.stream(
@@ -165,7 +193,9 @@ async def proxy_messages(request: Request):
         )
 
     if resp.status_code != 200:
-        log.warning("upstream error method=POST path=/v1/messages status=%d", resp.status_code)
+        log.warning(
+            "upstream error method=POST path=/v1/messages status=%d", resp.status_code
+        )
         try:
             content = resp.json()
         except Exception:
@@ -192,14 +222,21 @@ async def passthrough(request: Request, path: str):
             headers=headers,
         )
 
+    resp_headers = {
+        k: v
+        for k, v in resp.headers.items()
+        if k.lower() not in ("content-length", "transfer-encoding", "connection")
+    }
     return Response(
         status_code=resp.status_code,
         content=resp.content,
-        headers=dict(resp.headers),
+        headers=resp_headers,
     )
 
 
 if __name__ == "__main__":
-    logging.basicConfig(level=LOG_LEVEL, format="%(asctime)s %(name)s %(levelname)s %(message)s")
+    logging.basicConfig(
+        level=LOG_LEVEL, format="%(asctime)s %(name)s %(levelname)s %(message)s"
+    )
     log.info("upstream=%s port=%d timeout=%s", UPSTREAM, PORT, TIMEOUT)
-    uvicorn.run(app, host="0.0.0.0", port=PORT)
+    uvicorn.run(app, host="0.0.0.0", port=PORT, log_config=None, access_log=False)
