@@ -192,14 +192,18 @@ async def passthrough(request: Request, path: str):
             headers=headers,
         )
 
+    resp_headers = {
+        k: v for k, v in resp.headers.items()
+        if k.lower() not in ("content-length", "transfer-encoding", "connection")
+    }
     return Response(
         status_code=resp.status_code,
         content=resp.content,
-        headers=dict(resp.headers),
+        headers=resp_headers,
     )
 
 
 if __name__ == "__main__":
     logging.basicConfig(level=LOG_LEVEL, format="%(asctime)s %(name)s %(levelname)s %(message)s")
     log.info("upstream=%s port=%d timeout=%s", UPSTREAM, PORT, TIMEOUT)
-    uvicorn.run(app, host="0.0.0.0", port=PORT)
+    uvicorn.run(app, host="0.0.0.0", port=PORT, log_config=None, access_log=False)
