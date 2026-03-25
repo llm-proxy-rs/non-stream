@@ -7,6 +7,7 @@ Listens on port 3001, forwards to llm-proxy-rs on port 3000.
 """
 
 import json
+import logging
 import os
 
 import httpx
@@ -17,6 +18,9 @@ import uvicorn
 UPSTREAM = os.environ.get("UPSTREAM", "http://localhost:3000")
 PORT = int(os.environ.get("PORT", "3001"))
 TIMEOUT = float(os.environ.get("TIMEOUT", "600"))
+LOG_LEVEL = os.environ.get("LOG_LEVEL", "INFO").upper()
+
+log = logging.getLogger("non-stream")
 
 app = FastAPI()
 
@@ -131,6 +135,7 @@ async def proxy_messages(request: Request):
 
     # If caller wants streaming, passthrough the SSE stream directly
     if body.get("stream"):
+        log.info("stream passthrough method=POST path=/v1/messages model=%s", body.get("model"))
         async def stream_upstream():
             async with httpx.AsyncClient(timeout=httpx.Timeout(TIMEOUT)) as client:
                 async with client.stream(
@@ -148,6 +153,7 @@ async def proxy_messages(request: Request):
         )
 
     # Non-streaming: force stream on upstream, then reassemble
+    log.info("reassemble method=POST path=/v1/messages model=%s", body.get("model"))
     body["stream"] = True
 
     async with httpx.AsyncClient(timeout=httpx.Timeout(TIMEOUT)) as client:
@@ -158,6 +164,7 @@ async def proxy_messages(request: Request):
         )
 
     if resp.status_code != 200:
+        log.warning("upstream error method=POST path=/v1/messages status=%d", resp.status_code)
         try:
             content = resp.json()
         except Exception:
@@ -172,6 +179,7 @@ async def proxy_messages(request: Request):
 @app.api_route("/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH"])
 async def passthrough(request: Request, path: str):
     """Forward everything else to upstream as-is."""
+    log.info("passthrough path=/%s method=%s", path, request.method)
     body = await request.body()
     headers = _proxy_headers(request)
 
@@ -187,4 +195,6 @@ async def passthrough(request: Request, path: str):
 
 
 if __name__ == "__main__":
+    logging.basicConfig(level=LOG_LEVEL, format="%(asctime)s %(name)s %(levelname)s %(message)s")
+    log.info("upstream=%s port=%d timeout=%s", UPSTREAM, PORT, TIMEOUT)
     uvicorn.run(app, host="0.0.0.0", port=PORT)
