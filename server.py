@@ -21,9 +21,24 @@ PORT = int(os.environ.get("PORT", "3001"))
 TIMEOUT = float(os.environ.get("TIMEOUT", "600"))
 LOG_LEVEL = os.environ.get("LOG_LEVEL", "INFO").upper()
 
+# Comma-separated list of paths allowed through the proxy.
+_ALLOWED_PATHS = frozenset(
+    p.strip() for p in os.environ.get(
+        "ALLOWED_PATHS", "/v1/messages,/v1/messages/count_tokens,/v1/models,/health"
+    ).split(",") if p.strip()
+)
+
 log = logging.getLogger("non-stream")
 
 app = FastAPI()
+
+
+@app.middleware("http")
+async def check_allowed_paths(request: Request, call_next):
+    if request.url.path not in _ALLOWED_PATHS:
+        log.warning("blocked path=%s method=%s", request.url.path, request.method)
+        return JSONResponse(status_code=404, content={"error": "not found"})
+    return await call_next(request)
 
 # Hop-by-hop headers that should not be forwarded by a proxy.
 _HOP_BY_HOP = frozenset({

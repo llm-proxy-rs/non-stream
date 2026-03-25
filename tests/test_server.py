@@ -1631,13 +1631,14 @@ class TestPassthrough:
         assert resp.json() == {"models": []}
 
     def test_passthrough_non_json(self):
-        """Upstream returning non-JSON (e.g. HTML) should not crash."""
+        """Upstream returning non-JSON should not crash."""
         resp_mock = MagicMock()
         resp_mock.status_code = 200
         resp_mock.content = b"<html>OK</html>"
         resp_mock.headers = {"content-type": "text/html"}
 
-        with patch("server.httpx.AsyncClient") as mock_cls:
+        with patch("server.httpx.AsyncClient") as mock_cls, \
+             patch("server._ALLOWED_PATHS", frozenset({"/"})):
             mock_ctx = AsyncMock()
             mock_ctx.__aenter__ = AsyncMock(return_value=mock_ctx)
             mock_ctx.__aexit__ = AsyncMock(return_value=False)
@@ -1649,6 +1650,12 @@ class TestPassthrough:
 
         assert resp.status_code == 200
         assert resp.text == "<html>OK</html>"
+
+    def test_passthrough_blocks_unlisted_path(self):
+        client = TestClient(app, raise_server_exceptions=False)
+        resp = client.get("/some/random/path")
+        assert resp.status_code == 404
+        assert resp.json() == {"error": "not found"}
 
     def test_passthrough_strips_hop_by_hop_headers(self):
         resp_mock = MagicMock()
@@ -1664,7 +1671,7 @@ class TestPassthrough:
             mock_cls.return_value = mock_ctx
 
             client = TestClient(app, raise_server_exceptions=False)
-            client.get("/some/path")
+            client.get("/v1/models")
 
             call_kwargs = mock_ctx.request.call_args
             sent_headers = call_kwargs.kwargs.get("headers") or call_kwargs[1].get("headers")
